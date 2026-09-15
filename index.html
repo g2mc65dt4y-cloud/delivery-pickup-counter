@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#ffffff">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="配達・集荷">
+<title>配達・集荷カウンター</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Helvetica Neue",sans-serif;background:#f5f5f7;color:#111}
+header{padding:calc(env(safe-area-inset-top) + 16px) 18px 12px;background:#fff;position:sticky;top:0;z-index:2;border-bottom:1px solid #ddd}
+h1{font-size:22px;margin:0}.sub{color:#666;font-size:13px;margin-top:4px}
+main{padding:14px 14px 90px;max-width:600px;margin:auto}.card{background:#fff;border-radius:16px;padding:18px;margin-bottom:14px;box-shadow:0 1px 4px #00000012}
+label{display:block;font-weight:700;margin-bottom:7px}.field{font-size:28px;width:100%;padding:13px;border:1px solid #ccc;border-radius:12px;text-align:right}
+.row{display:flex;gap:10px}.row>*{flex:1}button{border:0;border-radius:12px;padding:13px 15px;font-size:16px;font-weight:700;background:#111;color:#fff}
+button.secondary{background:#eee;color:#111}.save{width:100%;font-size:18px;margin-top:12px}.message{text-align:center;color:#16823b;font-weight:700;margin-top:10px}
+.tabs{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid #ddd;display:flex;padding:8px 8px calc(8px + env(safe-area-inset-bottom));z-index:5}
+.tab{flex:1;background:transparent;color:#666;padding:9px 4px;font-size:13px}.tab.active{color:#111}
+.stat{display:flex;justify-content:space-between;padding:14px 0;border-bottom:1px solid #eee}.stat:last-child{border-bottom:0}.num{font-weight:800;font-size:22px}
+.record{display:grid;grid-template-columns:72px 1fr 1fr;gap:8px;align-items:center;padding:13px 0;border-bottom:1px solid #eee}.record:last-child{border-bottom:0}
+.record button{padding:7px;font-size:13px;background:#eee;color:#111}.muted{color:#777}.empty{text-align:center;color:#777;padding:35px 10px}
+.modal{position:fixed;inset:0;background:#0006;display:none;align-items:flex-end;z-index:10}.modal.show{display:flex}.sheet{background:#fff;width:100%;border-radius:20px 20px 0 0;padding:20px 18px calc(20px + env(safe-area-inset-bottom));max-width:600px;margin:auto}
+h2{margin-top:0}.small{font-size:13px;color:#666}
+</style>
+</head>
+<body>
+<header><h1>📦 配達・集荷カウンター</h1><div class="sub">自分用・端末内保存</div></header>
+<main id="app"></main>
+<nav class="tabs">
+<button class="tab active" data-tab="input">入力</button>
+<button class="tab" data-tab="daily">日別</button>
+<button class="tab" data-tab="monthly">月間</button>
+</nav>
+<div class="modal" id="modal"><div class="sheet" id="sheet"></div></div>
+<script>
+const KEY="deliveryPickupRecords_v1";
+let records=JSON.parse(localStorage.getItem(KEY)||"[]");
+let tab="input", selectedDate=today(), monthCursor=new Date();
+function today(){let d=new Date();d.setHours(0,0,0,0);return d}
+function keyDate(d){return new Date(d).toISOString().slice(0,10)}
+function fmt(d){return new Intl.DateTimeFormat("ja-JP",{year:"numeric",month:"numeric",day:"numeric",weekday:"short"}).format(new Date(d))}
+function fmtMonth(d){return new Intl.DateTimeFormat("ja-JP",{year:"numeric",month:"long"}).format(d)}
+function save(){localStorage.setItem(KEY,JSON.stringify(records))}
+function get(d){return records.find(r=>r.date===keyDate(d))}
+function render(){
+ document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("active",x.dataset.tab===tab));
+ const app=document.getElementById("app");
+ if(tab==="input") renderInput(app); else if(tab==="daily") renderDaily(app); else renderMonthly(app);
+}
+function renderInput(a){
+ const r=get(selectedDate);
+ a.innerHTML=`<div class="card">
+ <label>日付</label><input id="date" type="date" class="field" value="${keyDate(selectedDate)}" style="text-align:left;font-size:20px">
+ </div>
+ <div class="card">
+ <label>📦 配達個数</label><input id="delivery" inputmode="numeric" pattern="[0-9]*" class="field" placeholder="0" value="${r?.delivery??""}">
+ <br><label>🔄 集荷個数</label><input id="pickup" inputmode="numeric" pattern="[0-9]*" class="field" placeholder="0" value="${r?.pickup??""}">
+ <button class="save" id="saveBtn">保存する</button><div id="msg" class="message"></div>
+ </div>
+ ${r?`<div class="card"><b>${fmt(selectedDate)} の登録済みデータ</b><div class="stat"><span>配達</span><span class="num">${r.delivery} 個</span></div><div class="stat"><span>集荷</span><span class="num">${r.pickup} 個</span></div></div>`:""}`;
+ document.getElementById("date").onchange=e=>{selectedDate=new Date(e.target.value+"T00:00:00");render()};
+ document.getElementById("saveBtn").onclick=()=>{
+  const delivery=Math.max(0,parseInt(document.getElementById("delivery").value)||0);
+  const pickup=Math.max(0,parseInt(document.getElementById("pickup").value)||0);
+  const k=keyDate(selectedDate), old=get(selectedDate);
+  if(old){old.delivery=delivery;old.pickup=pickup}else records.push({date:k,delivery,pickup});
+  records.sort((a,b)=>b.date.localeCompare(a.date));save();
+  document.getElementById("msg").textContent="保存しました！";render();
+ };
+}
+function renderDaily(a){
+ a.innerHTML=`<div class="card"><h2>日別記録</h2><div id="list"></div></div>`;
+ const list=document.getElementById("list");
+ if(!records.length){list.innerHTML='<div class="empty">まだ記録がありません。<br>「入力」から登録してください。</div>';return}
+ list.innerHTML=records.map(r=>`<div class="record"><b>${r.date.slice(5).replace("-","/")}</b><span>配達<br><b>${r.delivery}</b> 個</span><span>集荷<br><b>${r.pickup}</b> 個</span><button onclick="edit('${r.date}')">修正</button></div>`).join("");
+}
+function edit(k){
+ const r=records.find(x=>x.date===k);
+ document.getElementById("sheet").innerHTML=`<h2>データ修正</h2><p class="small">${fmt(r.date)}</p>
+ <label>配達個数</label><input id="ed" class="field" inputmode="numeric" value="${r.delivery}">
+ <br><label>集荷個数</label><input id="ep" class="field" inputmode="numeric" value="${r.pickup}">
+ <button class="save" onclick="updateRecord('${k}')">保存</button>
+ <button class="secondary save" onclick="delRecord('${k}')">この日のデータを削除</button>
+ <button class="secondary save" onclick="closeModal()">閉じる</button>`;
+ document.getElementById("modal").classList.add("show");
+}
+function updateRecord(k){let r=records.find(x=>x.date===k);r.delivery=parseInt(document.getElementById("ed").value)||0;r.pickup=parseInt(document.getElementById("ep").value)||0;save();closeModal();render()}
+function delRecord(k){if(confirm("この日のデータを削除しますか？")){records=records.filter(x=>x.date!==k);save();closeModal();render()}}
+function closeModal(){document.getElementById("modal").classList.remove("show")}
+function renderMonthly(a){
+ const y=monthCursor.getFullYear(),m=monthCursor.getMonth();
+ const rs=records.filter(r=>{let d=new Date(r.date+"T00:00:00");return d.getFullYear()===y&&d.getMonth()===m});
+ const dt=rs.reduce((s,r)=>s+r.delivery,0),pt=rs.reduce((s,r)=>s+r.pickup,0),n=rs.length;
+ a.innerHTML=`<div class="card"><div class="row"><button class="secondary" id="prev">←</button><button class="secondary" id="next">→</button></div>
+ <h2 style="text-align:center">${fmtMonth(monthCursor)}</h2></div>
+ <div class="card"><h2>月間累計</h2>
+ <div class="stat"><span>📦 配達累計</span><span class="num">${dt} 個</span></div>
+ <div class="stat"><span>🔄 集荷累計</span><span class="num">${pt} 個</span></div>
+ <div class="stat"><span>📅 稼働日数</span><span class="num">${n} 日</span></div></div>
+ <div class="card"><h2>1日平均</h2>
+ <div class="stat"><span>平均配達</span><span class="num">${n?(dt/n).toFixed(1):"0.0"} 個</span></div>
+ <div class="stat"><span>平均集荷</span><span class="num">${n?(pt/n).toFixed(1):"0.0"} 個</span></div></div>`;
+ document.getElementById("prev").onclick=()=>{monthCursor.setMonth(monthCursor.getMonth()-1);render()};
+ document.getElementById("next").onclick=()=>{monthCursor.setMonth(monthCursor.getMonth()+1);render()};
+}
+document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{tab=b.dataset.tab;render()});
+render();
+</script>
+</body></html>
